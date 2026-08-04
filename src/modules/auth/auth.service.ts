@@ -23,9 +23,14 @@ export class AuthService {
       throw new ConflictException('User already exists');
     }
     const password = await bcrpt.hash(input.password, 10);
-    const refreshToken = await this.jwtService.signAsync({
-      sub: input.email,
-    });
+    const refreshToken = await this.jwtService.signAsync(
+      {
+        sub: input.email,
+      },
+      {
+        expiresIn: '7d',
+      },
+    );
     const hashedRefreshToken = await bcrpt.hash(refreshToken, 10);
 
     const newUser = await this.prisma.user.create({
@@ -71,9 +76,14 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new ConflictException('Invalid password');
     }
-    const refreshToken = await this.jwtService.signAsync({
-      sub: input.email,
-    });
+    const refreshToken = await this.jwtService.signAsync(
+      {
+        sub: input.email,
+      },
+      {
+        expiresIn: '7d',
+      },
+    );
     const hashedRefreshToken = await bcrpt.hash(refreshToken, 10);
 
     await this.prisma.user.update({
