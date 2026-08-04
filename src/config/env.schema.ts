@@ -8,4 +8,6 @@ export const envSchema = z.object({
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string(),
   REDIS_URL: z.string(),
+  FRONTEND_URL: z.string(),
+  REVALIDATE_SECRET: z.string(),
 });
