@@ -108,7 +108,7 @@ export class JokeService {
 
       const updatedJoke = await this.prisma.$transaction(async (tx) => {
         // update joke
-       let joke= await tx.joke.update({
+        const joke = await tx.joke.update({
           where: { slug },
           data: {
             ...input,

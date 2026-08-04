@@ -44,7 +44,7 @@ model Joke{
 model Redirect {
   id   String @id @default(uuid())
   prev_slug String  
-  new_slug String @unique
+  new_slug String 
   active Boolean @default(true)
   jokeId String
   joke Joke @relation(fields:[jokeId], references:[id])
