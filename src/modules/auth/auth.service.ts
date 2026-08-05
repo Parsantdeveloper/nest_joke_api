@@ -50,15 +50,21 @@ export class AuthService {
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite:
+        this.configService.get<string>('NODE_ENV') === 'production'
+          ? 'none'
+          : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     response.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 1000, // 1 hour
+      sameSite:
+        this.configService.get<string>('NODE_ENV') === 'production'
+          ? 'none'
+          : 'lax',
+      maxAge: 60 * 60 * 1000,
     });
 
     return { accessToken, refreshToken };
@@ -100,15 +106,21 @@ export class AuthService {
     response.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite:
+        this.configService.get<string>('NODE_ENV') === 'production'
+          ? 'none'
+          : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     response.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 1000, // 1 hour
+      sameSite:
+        this.configService.get<string>('NODE_ENV') === 'production'
+          ? 'none'
+          : 'lax',
+      maxAge: 60 * 60 * 1000,
     });
     return { accessToken, refreshToken };
   }
@@ -140,10 +152,22 @@ export class AuthService {
     res.cookie('accessToken', accessToken, {
       httpOnly: true,
       secure: this.configService.get<string>('NODE_ENV') === 'production',
-      sameSite: 'strict',
-      maxAge: 60 * 60 * 1000, // 1 hour
+      sameSite:
+        this.configService.get<string>('NODE_ENV') === 'production'
+          ? 'none'
+          : 'lax',
+      maxAge: 60 * 60 * 1000,
     });
 
     return { refreshToken: input.refreshToken, accessToken };
+  }
+
+  async getSession(accessToken: string) {
+    const payload: { sub: string; email: string; role: string } =
+      await this.jwtService.verifyAsync(accessToken);
+    if (!payload) {
+      throw new ConflictException('Invalid access token');
+    }
+    return payload;
   }
 }

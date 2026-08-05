@@ -1,4 +1,4 @@
-import { Controller, Req, Post, Body, Headers, Res } from '@nestjs/common';
+import { Controller, Req, Post, Body, Get, Res } from '@nestjs/common';
 import { type Response, type Request } from 'express';
 import { AuthService } from './auth.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
@@ -30,5 +30,11 @@ export class AuthController {
     const refreshToken: string = req.cookies['refreshToken'] as string;
 
     return await this.authService.refreshToken({ refreshToken }, res);
+  }
+
+  @Get('session')
+  async getSession(@Req() req: Request) {
+    const accessToken: string = req.cookies['accessToken'] as string;
+    return await this.authService.getSession(accessToken);
   }
 }
