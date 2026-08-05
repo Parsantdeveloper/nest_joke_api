@@ -16,14 +16,14 @@ export class AuthService {
   ) {}
 
   private getCookieOptions(maxAge: number) {
-  const isProd = this.configService.get<string>('NODE_ENV') === 'production';
-  return {
-    httpOnly: true,
-    secure: isProd,                 // true only when we can guarantee HTTPS
-    sameSite: (isProd ? 'none' : 'lax') as 'none' | 'lax',
-    maxAge,
-  };
-}
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    return {
+      httpOnly: true,
+      secure: isProd, // true only when we can guarantee HTTPS
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge,
+    };
+  }
 
   async register(input: CreateUserDto, response: Response) {
     const user = await this.prisma.user.findUnique({
@@ -57,8 +57,16 @@ export class AuthService {
       role: newUser.role,
     });
 
-   response.cookie('refreshToken', refreshToken, this.getCookieOptions(7 * 24 * 60 * 60 * 1000));
-response.cookie('accessToken', accessToken, this.getCookieOptions(60 * 60 * 1000));
+    response.cookie(
+      'refreshToken',
+      refreshToken,
+      this.getCookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
+    response.cookie(
+      'accessToken',
+      accessToken,
+      this.getCookieOptions(60 * 60 * 1000),
+    );
 
     return { accessToken, refreshToken };
   }
@@ -96,12 +104,17 @@ response.cookie('accessToken', accessToken, this.getCookieOptions(60 * 60 * 1000
       role: user.role,
     });
 
-   response.cookie('refreshToken', refreshToken, this.getCookieOptions(7 * 24 * 60 * 60 * 1000));
-response.cookie('accessToken', accessToken, this.getCookieOptions(60 * 60 * 1000));
+    response.cookie(
+      'refreshToken',
+      refreshToken,
+      this.getCookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
+    response.cookie(
+      'accessToken',
+      accessToken,
+      this.getCookieOptions(60 * 60 * 1000),
+    );
     return { accessToken, refreshToken };
-  
-
-
   }
 
   async refreshToken(input: RefreshTokenDto, res: Response) {
@@ -128,9 +141,11 @@ response.cookie('accessToken', accessToken, this.getCookieOptions(60 * 60 * 1000
       role: user.role,
     });
 
-  
-
-res.cookie('accessToken', accessToken, this.getCookieOptions(60 * 60 * 1000));
+    res.cookie(
+      'accessToken',
+      accessToken,
+      this.getCookieOptions(60 * 60 * 1000),
+    );
 
     return { refreshToken: input.refreshToken, accessToken };
   }

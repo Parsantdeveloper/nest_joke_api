@@ -123,13 +123,15 @@ export class JokeService {
   }
 
   async updateJoke(input: UpdateJokeDto, slug: string) {
-    const existingJoke = await this.prisma.joke.findUnique({
-      where: { slug },
-    });
+    const existingJoke = await this.prisma.joke.findUnique({ where: { slug } });
     if (!existingJoke) {
       throw new NotFoundException('Joke not found');
     }
-    if (!input.title) {
+
+    const titleChanged = !!input.title && input.title !== existingJoke.title;
+
+    // Covers: no title sent, OR title sent but unchanged, OR only content changed
+    if (!titleChanged) {
       const updatedJoke = await this.prisma.joke.update({
         where: { slug },
         data: input,
@@ -137,46 +139,40 @@ export class JokeService {
       await this.revalidateSlug(slug);
       return updatedJoke;
     }
-    if (input.title !== existingJoke.title) {
-      const newSlug = this.generateSlug(input.title);
-      const slugExists = await this.prisma.joke.findUnique({
-        where: { slug: newSlug },
-      });
-      if (slugExists) {
-        throw new ConflictException('Joke with this title already exists');
-      }
 
-      const updatedJoke = await this.prisma.$transaction(async (tx) => {
-        // update joke
-        const joke = await tx.joke.update({
-          where: { slug },
-          data: {
-            ...input,
-            slug: newSlug,
-          },
-        });
-
-        const existingRedirects = await tx.redirect.findMany({
-          where: { jokeId: existingJoke.id, active: true },
-        });
-        for (const redirect of existingRedirects) {
-          await tx.redirect.update({
-            where: { id: redirect.id },
-            data: { active: false },
-          });
-        }
-
-        await tx.redirect.create({
-          data: {
-            jokeId: existingJoke.id,
-            prev_slug: existingJoke.slug,
-            new_slug: newSlug,
-          },
-        });
-        return joke;
-      });
-      await this.revalidateSlugs([existingJoke.slug, newSlug]);
-      return updatedJoke;
+    if (!input.title)
+      throw new ConflictException('Title cannot be empty when changing title');
+    const newSlug = this.generateSlug(input.title);
+    const slugExists = await this.prisma.joke.findUnique({
+      where: { slug: newSlug },
+    });
+    if (slugExists) {
+      throw new ConflictException('Joke with this title already exists');
     }
+
+    const updatedJoke = await this.prisma.$transaction(async (tx) => {
+      const joke = await tx.joke.update({
+        where: { slug },
+        data: { ...input, slug: newSlug },
+      });
+
+      await tx.redirect.updateMany({
+        where: { jokeId: existingJoke.id, active: true },
+        data: { active: false },
+      });
+
+      await tx.redirect.create({
+        data: {
+          jokeId: existingJoke.id,
+          prev_slug: existingJoke.slug,
+          new_slug: newSlug,
+        },
+      });
+
+      return joke;
+    });
+
+    await this.revalidateSlugs([existingJoke.slug, newSlug]);
+    return updatedJoke;
   }
 }
