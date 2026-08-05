@@ -3,7 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { RefreshTokenDto } from './dto/refresh-token.dto.js';
 import { ConfigService } from '@nestjs/config';
-import { Response } from 'express';
+import { Response,CookieOptions } from 'express';
 import bcrpt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 
@@ -15,7 +15,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  private getCookieOptions(maxAge: number) {
+  private getCookieOptions(maxAge: number):CookieOptions {
     const isProd = this.configService.get<string>('NODE_ENV') === 'production';
     return {
       httpOnly: true,
@@ -107,7 +107,7 @@ export class AuthService {
     response.cookie(
       'refreshToken',
       refreshToken,
-      this.getCookieOptions(7 * 24 * 60 * 60 * 1000),
+       this.getCookieOptions(7 * 24 * 60 * 60 * 1000),
     );
     response.cookie(
       'accessToken',
