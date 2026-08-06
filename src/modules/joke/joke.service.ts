@@ -10,12 +10,15 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import slugify from 'slugify';
 import { ROUTES, jokePath } from '../../utils/redirect-path.js';
+import { RedisService } from '../redis/redis.service.js';
+import { RedirectType } from '../../generated/prisma/enums.js';
 
 @Injectable()
 export class JokeService {
   constructor(
     private prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   private generateSlug(title: string): string {
@@ -45,9 +48,7 @@ export class JokeService {
 
   async createJoke(input: CreateJokeDto, authorId: string) {
     const slug = this.generateSlug(input.title);
-    const existingJoke = await this.prisma.joke.findUnique({
-      where: { slug },
-    });
+    const existingJoke = await this.prisma.joke.findUnique({ where: { slug } });
     if (existingJoke) {
       throw new ConflictException('Joke with this title already exists');
     }
@@ -89,10 +90,7 @@ export class JokeService {
     const titleChanged = !!input.title && input.title !== existingJoke.title;
 
     if (!titleChanged) {
-      const updatedJoke = await this.prisma.joke.update({
-        where: { slug },
-        data: input,
-      });
+      const updatedJoke = await this.prisma.joke.update({ where: { slug }, data: input });
       await this.revalidatePaths([ROUTES.JOKES, jokePath(slug)]);
       return updatedJoke;
     }
@@ -101,44 +99,59 @@ export class JokeService {
       throw new ConflictException('Title cannot be empty when changing title');
 
     const newSlug = this.generateSlug(input.title);
-    const slugExists = await this.prisma.joke.findUnique({
-      where: { slug: newSlug },
-    });
+    const slugExists = await this.prisma.joke.findUnique({ where: { slug: newSlug } });
     if (slugExists) {
       throw new ConflictException('Joke with this title already exists');
     }
 
     const oldPath = jokePath(existingJoke.slug);
     const newPath = jokePath(newSlug);
+    const PERMANENT: RedirectType = 'PERMANENT_308' as RedirectType;
 
-    const updatedJoke = await this.prisma.$transaction(async (tx) => {
-      const joke = await tx.joke.update({
-        where: { slug },
-        data: { ...input, slug: newSlug },
-      });
+    const { joke, chainedRedirects, staleFromPath } = await this.prisma.$transaction(
+      async (tx) => {
+        const joke = await tx.joke.update({
+          where: { slug },
+          data: { ...input, slug: newSlug },
+        });
 
-      await tx.redirect.updateMany({
-        where: { to_path: oldPath },
-        data: { to_path: newPath },
-      });
+        // capture BEFORE mutating, so we know exactly which Redis keys
+        // need refreshing once this commits
+        const chained = await tx.redirect.findMany({ where: { to_path: oldPath } });
+        await tx.redirect.updateMany({
+          where: { to_path: oldPath },
+          data: { to_path: newPath },
+        });
 
-      await tx.redirect.upsert({
-        where: { from_path: oldPath },
-        create: {
-          from_path: oldPath,
-          to_path: newPath,
-          type: 'PERMANENT_308',
-          active: true,
-        },
-        update: { to_path: newPath, type: 'PERMANENT_308', active: true },
-      });
+        await tx.redirect.upsert({
+          where: { from_path: oldPath },
+          create: { from_path: oldPath, to_path: newPath, type: PERMANENT, active: true },
+          update: { to_path: newPath, type: PERMANENT, active: true },
+        });
 
-      await tx.redirect.deleteMany({ where: { from_path: newPath } });
+        const stale = await tx.redirect.findUnique({ where: { from_path: newPath } });
+        if (stale) {
+          await tx.redirect.deleteMany({ where: { from_path: newPath } });
+        }
 
-      return joke;
-    });
+        return {
+          joke,
+          chainedRedirects: chained.map((r) => ({ from_path: r.from_path, type: r.type })),
+          staleFromPath: stale?.from_path ?? null,
+        };
+      },
+    );
+
+    // sync Redis only after the transaction has actually committed
+    await this.redis.setRedirect(oldPath, newPath, PERMANENT);
+    await Promise.allSettled(
+      chainedRedirects.map((r) => this.redis.setRedirect(r.from_path, newPath, r.type)),
+    );
+    if (staleFromPath) {
+      await this.redis.deleteRedirect(staleFromPath);
+    }
 
     await this.revalidatePaths([ROUTES.JOKES, oldPath, newPath]);
-    return updatedJoke;
+    return joke;
   }
 }

@@ -9,6 +9,7 @@ import { JokeModule } from './modules/joke/joke.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { RedirectFilter } from './common/filters/redirect.filter.js';
 import { RedirectModule } from './modules/redirect/redirect.module.js';
+import { RedisModule } from './modules/redis/redis.module.js';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RedirectModule } from './modules/redirect/redirect.module.js';
     AuthModule,
     JokeModule,
     RedirectModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_FILTER, useClass: RedirectFilter }],
