@@ -7,10 +7,9 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { CreateJokeDto } from './dto/create-joke.dto.js';
 import { UpdateJokeDto } from './dto/update-joke.dto.js';
 import { ConfigService } from '@nestjs/config';
-import { PermanentRedirectException } from '../../common/exceptions/permanent-redirect.exception.js';
-
 import axios from 'axios';
 import slugify from 'slugify';
+import { ROUTES, jokePath } from '../../utils/redirect-path.js';
 
 @Injectable()
 export class JokeService {
@@ -23,11 +22,12 @@ export class JokeService {
     return slugify(title, { lower: true, strict: true });
   }
 
-  private async revalidateSlug(slug: string): Promise<void> {
+  private async revalidatePaths(paths: string[]): Promise<void> {
+    const uniquePaths = [...new Set(paths)];
     try {
       await axios.post(
         `${this.config.getOrThrow<string>('FRONTEND_URL')}/api/revalidate`,
-        { slug },
+        { paths: uniquePaths },
         {
           headers: {
             'x-revalidate-secret':
@@ -36,13 +36,13 @@ export class JokeService {
         },
       );
     } catch (error) {
-      console.error(`Revalidation failed for slug "${slug}":`, error);
+      console.error(
+        `Revalidation failed for paths [${uniquePaths.join(', ')}]:`,
+        error,
+      );
     }
   }
 
-  private async revalidateSlugs(slugs: string[]): Promise<void> {
-    await Promise.allSettled(slugs.map((s) => this.revalidateSlug(s)));
-  }
   async createJoke(input: CreateJokeDto, authorId: string) {
     const slug = this.generateSlug(input.title);
     const existingJoke = await this.prisma.joke.findUnique({
@@ -52,73 +52,31 @@ export class JokeService {
       throw new ConflictException('Joke with this title already exists');
     }
     const joke = await this.prisma.joke.create({
-      data: {
-        title: input.title,
-        content: input.content,
-        slug,
-        authorId,
-      },
+      data: { title: input.title, content: input.content, slug, authorId },
     });
 
-    await this.prisma.redirect.create({
-      data: {
-        jokeId: joke.id,
-        prev_slug: slug,
-        new_slug: slug,
-      },
-    });
-    await this.revalidateSlug(slug);
-
+    await this.revalidatePaths([ROUTES.JOKES, jokePath(slug)]);
     return { joke };
   }
 
   async getAllJokes() {
     return this.prisma.joke.findMany({
-      include: {
-        author: {
-          select: {
-            email: true,
-            id: true,
-          },
-        },
-      },
+      include: { author: { select: { email: true, id: true } } },
     });
   }
 
   async getJokeBySlug(slug: string) {
-    const joke = await this.prisma.joke.findUnique({
-      where: { slug },
-    });
-
-    if (!joke) {
-      const redirect = await this.prisma.redirect.findFirst({
-        where: { prev_slug: slug, active: true },
-        select: { new_slug: true },
-      });
-
-      if (redirect) {
-        throw new PermanentRedirectException(redirect.new_slug);
-      }
-    }
+    const joke = await this.prisma.joke.findUnique({ where: { slug } });
+    if (!joke) throw new NotFoundException('Joke not found');
     return joke;
   }
 
   async deleteJoke(slug: string) {
-    const joke = await this.prisma.joke.findUnique({
-      where: { slug },
-    });
+    const joke = await this.prisma.joke.findUnique({ where: { slug } });
+    if (!joke) throw new NotFoundException('Joke not found');
 
-    if (!joke) {
-      throw new NotFoundException('Joke not found');
-    }
-    await this.prisma.redirect.deleteMany({
-      where: { jokeId: joke.id },
-    });
-
-    const deletedJoke = await this.prisma.joke.delete({
-      where: { slug },
-    });
-    await this.revalidateSlug(slug);
+    const deletedJoke = await this.prisma.joke.delete({ where: { slug } });
+    await this.revalidatePaths([ROUTES.JOKES, jokePath(slug)]);
     return deletedJoke;
   }
 
@@ -130,18 +88,18 @@ export class JokeService {
 
     const titleChanged = !!input.title && input.title !== existingJoke.title;
 
-    // Covers: no title sent, OR title sent but unchanged, OR only content changed
     if (!titleChanged) {
       const updatedJoke = await this.prisma.joke.update({
         where: { slug },
         data: input,
       });
-      await this.revalidateSlug(slug);
+      await this.revalidatePaths([ROUTES.JOKES, jokePath(slug)]);
       return updatedJoke;
     }
 
     if (!input.title)
       throw new ConflictException('Title cannot be empty when changing title');
+
     const newSlug = this.generateSlug(input.title);
     const slugExists = await this.prisma.joke.findUnique({
       where: { slug: newSlug },
@@ -150,6 +108,9 @@ export class JokeService {
       throw new ConflictException('Joke with this title already exists');
     }
 
+    const oldPath = jokePath(existingJoke.slug);
+    const newPath = jokePath(newSlug);
+
     const updatedJoke = await this.prisma.$transaction(async (tx) => {
       const joke = await tx.joke.update({
         where: { slug },
@@ -157,22 +118,27 @@ export class JokeService {
       });
 
       await tx.redirect.updateMany({
-        where: { jokeId: existingJoke.id, active: true },
-        data: { active: false },
+        where: { to_path: oldPath },
+        data: { to_path: newPath },
       });
 
-      await tx.redirect.create({
-        data: {
-          jokeId: existingJoke.id,
-          prev_slug: existingJoke.slug,
-          new_slug: newSlug,
+      await tx.redirect.upsert({
+        where: { from_path: oldPath },
+        create: {
+          from_path: oldPath,
+          to_path: newPath,
+          type: 'PERMANENT_308',
+          active: true,
         },
+        update: { to_path: newPath, type: 'PERMANENT_308', active: true },
       });
+
+      await tx.redirect.deleteMany({ where: { from_path: newPath } });
 
       return joke;
     });
 
-    await this.revalidateSlugs([existingJoke.slug, newSlug]);
+    await this.revalidatePaths([ROUTES.JOKES, oldPath, newPath]);
     return updatedJoke;
   }
 }

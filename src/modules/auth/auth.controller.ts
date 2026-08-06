@@ -37,4 +37,9 @@ export class AuthController {
     const accessToken: string = req.cookies['accessToken'] as string;
     return await this.authService.getSession(accessToken);
   }
+
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: Response) {
+    return this.authService.logout(res);
+  }
 }

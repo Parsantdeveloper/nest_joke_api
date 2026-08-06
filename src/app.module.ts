@@ -8,6 +8,7 @@ import { PrismaModule } from './prisma/prisma.module.js';
 import { JokeModule } from './modules/joke/joke.module.js';
 import { APP_FILTER } from '@nestjs/core';
 import { RedirectFilter } from './common/filters/redirect.filter.js';
+import { RedirectModule } from './modules/redirect/redirect.module.js';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { RedirectFilter } from './common/filters/redirect.filter.js';
     PrismaModule,
     AuthModule,
     JokeModule,
+    RedirectModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_FILTER, useClass: RedirectFilter }],

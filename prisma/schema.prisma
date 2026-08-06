@@ -17,39 +17,39 @@ enum Role {
   ADMIN
 }
 
-model User{
-  id     String   @id @default(uuid())
-  email    String   @unique
-  password String
-  role     Role     @default(USER)  
+enum RedirectType {
+  TEMPORARY_307
+  PERMANENT_308
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  password           String
+  role               Role     @default(USER)
   hashedRefreshToken String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  joke Joke[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  joke               Joke[]
 }
 
-model Joke{
-  id     String @id @default(uuid())
-  title  String 
-  slug   String @unique
-  content String
-  authorId String
-  author   User @relation(fields:[authorId], references:[id])
-  redirect Redirect[]
+model Joke {
+  id        String   @id @default(uuid())
+  title     String
+  slug      String   @unique
+  content   String
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
-
 
 model Redirect {
-  id   String @id @default(uuid())
-  prev_slug String  
-  new_slug String 
-  active Boolean @default(true)
-  jokeId String
-  joke Joke @relation(fields:[jokeId], references:[id])
-  createdAt DateTime @default(now())
+  id        String       @id @default(uuid())
+  from_path String @unique
+  to_path   String
+  type      RedirectType @default(TEMPORARY_307)
+  active    Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 }
-
-
-
