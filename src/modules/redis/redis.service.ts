@@ -35,9 +35,14 @@ export class RedisService {
     toPath: string,
     type: RedirectType,
   ): Promise<void> {
-    const value: CachedRedirect = { to: toPath, status: this.statusCodeFor(type) };
+    const value: CachedRedirect = {
+      to: toPath,
+      status: this.statusCodeFor(type),
+    };
     try {
-      await this.client.set(this.key(fromPath), value, { ex: SAFETY_TTL_SECONDS });
+      await this.client.set(this.key(fromPath), value, {
+        ex: SAFETY_TTL_SECONDS,
+      });
     } catch (error) {
       // Redis is a cache, not the source of truth — never let a cache
       // failure block or fail the actual DB mutation that called this.

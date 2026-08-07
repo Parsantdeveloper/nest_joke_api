@@ -11,4 +11,5 @@ export const envSchema = z.object({
   UPSTASH_REDIS_REST_TOKEN: z.string(),
   FRONTEND_URL: z.string(),
   REVALIDATE_SECRET: z.string(),
+  SWAGGER_ENABLED: z.coerce.boolean().default(false),
 });

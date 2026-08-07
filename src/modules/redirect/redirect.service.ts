@@ -132,7 +132,11 @@ export class RedirectService {
     }
 
     if (updated.active) {
-      await this.redis.setRedirect(updated.from_path, updated.to_path, updated.type);
+      await this.redis.setRedirect(
+        updated.from_path,
+        updated.to_path,
+        updated.type,
+      );
     } else {
       // explicitly deactivated — make sure no stale "active" entry lingers
       await this.redis.deleteRedirect(updated.from_path);
